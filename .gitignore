@@ -2,3 +2,4 @@
 docker-compose.override.yml
 .idea
 test/zm/*
+zm/*
