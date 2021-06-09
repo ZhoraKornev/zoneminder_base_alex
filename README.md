@@ -23,7 +23,7 @@ There is also full support for multi-server setups with automation to link all s
 
 1. Install [Docker](https://docs.docker.com/get-docker/) and [docker-compose](https://docs.docker.com/compose/install/)
 2. Download docker-compose.yml or docker-compose-multi.yml depending on single/multi server setups.
-3. Download .env
+3. Download .env or copy .env.dist to .env
 4. Place all these files in the same folder and configure .env and the yml files as you please.
 5. Run `docker-compose up -d` to start.
 
@@ -49,6 +49,7 @@ Logs are rotated according to the [TAI64N standard](http://skarnet.org/software/
 
 `/data` is not included in fix-permissions because it takes a substantial amount of time to run for the events folder
 when there are a large number of files
+For more customizing ports or volumes use docker-compose.override.yml for example you can see docker-compose.override.yml.dist
 
 # Issues:
 - Tell me?
