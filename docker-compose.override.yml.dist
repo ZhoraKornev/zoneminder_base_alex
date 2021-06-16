@@ -3,4 +3,10 @@ version: '3'
 services:
   db:
     ports:
-      - "${MYSQL_EXPOSE_PORT}:3306"
+      - "3399:3306"
+  zoneminder:
+    image: ghcr.io/zoneminder-containers/zoneminder-base:latest
+    container_name: zoneminder_containerized
+    restart: always
+    ports:
+      - "8080:80"
