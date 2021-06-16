@@ -3,7 +3,7 @@ version: '3'
 services:
   db:
     image: mariadb
-    container_name: zoneminder_maridb_containerized
+    container_name: zoneminder_mariadb_containerized
     restart: always
     networks:
       - zoneminder
