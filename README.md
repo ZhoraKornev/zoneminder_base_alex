@@ -1,8 +1,8 @@
 # Zoneminder Container
 
-<a href="https://github.com/zoneminder-addons/zoneminder-base/actions"><img alt="GitHub Actions Build" src="https://github.com/zoneminder-addons/zoneminder-base/actions/workflows/docker-build.yaml/badge.svg"></a>
-<a href="https://hub.docker.com/r/yaoa/zoneminder-base"><img alt="Docker Hub Pulls" src="https://img.shields.io/docker/pulls/yaoa/zoneminder-base.svg"></a>
-<img src="https://img.shields.io/badge/Status-Completed-brightgreen" alt="Status">
+[![Docker Build](https://github.com/zoneminder-containers/zoneminder-base/actions/workflows/docker-build.yaml/badge.svg)](https://github.com/zoneminder-containers/eventserver-base/actions/workflows/docker-build.yaml)
+[![DockerHub Pulls](https://img.shields.io/docker/pulls/yaoa/zoneminder-base.svg)](https://hub.docker.com/r/yaoa/zoneminder-base)
+![Status](https://img.shields.io/badge/Status-Completed-brightgreen)
 
 # Why
 This is an automatically updating ZoneMinder container built using s6-overlay with full support for all things containers.
@@ -33,6 +33,7 @@ This is the bleeding edge and is not recommended for production!
 ## Defining a Version
 
 1. Replace `latest` in the `docker-compose.yml` file with any ZoneMinder version you would like to run.
+You can find all available releases [here](https://github.com/zoneminder-containers/zoneminder-base/releases).
 Ex. `1.36.1`
    
 Note: For those new to Docker, these values are known as the container tag.

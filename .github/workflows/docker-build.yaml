@@ -254,7 +254,7 @@ jobs:
           docker push ${{ matrix.registry.repo }}:${{ matrix.arch }}-${GITHUB_REF##*/}-${ZM_VERSION}
           echo ${{ matrix.registry.repo }}:${{ matrix.arch }}-${GITHUB_REF##*/}-${ZM_VERSION} published
 
-      - name: Deploy Latest (latest)
+      - name: Deploy Latest (arch-latest)
         if: ${{ github.ref == 'refs/heads/main' }}
         run: |
           set -x
@@ -517,5 +517,5 @@ jobs:
             -u "${{ secrets.GCHR_USERNAME}}:${{secrets.GHCR_PAT}}" \
             -H "Accept: application/vnd.github.everest-preview+json" \
             -H "Content-Type: application/json" https://api.github.com/repos/zoneminder-containers/eventserver-base/dispatches \
-            --data '{"event_type": "build_image", "client_payload": {"zm_version": "${{ needs.getversion.outputs.build-version }}", "tagged": "${{ startsWith(github.ref, 'refs/tags/') }}"}'
+            --data '{"event_type": "build_image", "client_payload": {"zm_version": "${{ needs.getversion.outputs.build-version }}", "tagged": "${{ startsWith(github.ref, 'refs/tags/') }}"}}'
           echo "Dispatch Successful"
