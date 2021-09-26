@@ -30,23 +30,6 @@ RUN set -x \
 
 #####################################################################
 #                                                                   #
-# Convert rootfs to LF using dos2unix                               #
-# Alleviates issues when git uses CRLF on Windows                   #
-#                                                                   #
-#####################################################################
-FROM alpine:latest as rootfs-converter
-WORKDIR /rootfs
-
-RUN set -x \
-    && apk add --repository=http://dl-cdn.alpinelinux.org/alpine/edge/community/ \
-        dos2unix
-
-COPY root .
-RUN set -x \
-    && find . -type f -print0 | xargs -0 -n 1 -P 4 dos2unix
-
-#####################################################################
-#                                                                   #
 # Download and extract s6 overlay                                   #
 #                                                                   #
 #####################################################################
@@ -72,7 +55,7 @@ RUN set -x \
 # Prepare base-image with core programs + repository                #
 #                                                                   #
 #####################################################################
-FROM debian:buster as base-image-core
+FROM debian:bullseye as base-image-core
 
 # Skip interactive post-install scripts
 ENV DEBIAN_FRONTEND=noninteractive
@@ -84,11 +67,6 @@ RUN set -x \
         gnupg \
         wget \
     && rm -rf /var/lib/apt/lists/*
-
-# Required for libmp4v2-dev
-RUN set -x \
-    && echo "deb [trusted=yes] https://zmrepo.zoneminder.com/debian/release-1.34 buster/" > /etc/apt/sources.list.d/zoneminder.list \
-    && wget -O - https://zmrepo.zoneminder.com/debian/archive-keyring.gpg | apt-key add -
 
 #####################################################################
 #                                                                   #
@@ -105,15 +83,16 @@ RUN set -x \
     && apt-get install -y \
         devscripts
 
+COPY --from=zm-source /zmsource/zoneminder_control /tmp/control
+
 # Create runtime package
-RUN --mount=type=bind,target=/tmp/control,source=/zmsource/zoneminder_control,from=zm-source,rw \
+RUN --mount=type=bind,target=/usr/share/equivs/template/debian/compat,source=/zmsource/zoneminder_compat,from=zm-source,rw \
     set -x \
     && equivs-build /tmp/control \
     && ls | grep -P \(zoneminder_\)\(.*\)\(\.deb\) | xargs -I {} mv {} runtime-deps.deb
 
 # Create build-deps package
-RUN --mount=type=bind,target=/tmp/control,source=/zmsource/zoneminder_control,from=zm-source,rw \
-    set -x \
+RUN set -x \
     && mk-build-deps /tmp/control \
     && ls | grep -P \(build-deps\)\(.*\)\(\.deb\) | xargs -I {} mv {} build-deps.deb
 
@@ -134,6 +113,13 @@ RUN --mount=type=bind,target=/tmp/runtime-deps.deb,source=/packages/runtime-deps
     && apt-get install -y --no-install-recommends \
         ./tmp/runtime-deps.deb \
     && rm -rf /var/lib/apt/lists/*
+
+# Remove "zoneminder" shim package from runtime-deps.deb and
+# set all runtime dependencies installed by package to manually installed
+# Allows removing individual packages without including all packages in autoremove
+RUN set -x \
+    && apt-get -y remove zoneminder \
+    && apt-mark manual $(apt-get -s autoremove 2>/dev/null | awk '/^Remv / { print $2 }')
 
 #####################################################################
 #                                                                   #
@@ -198,8 +184,8 @@ ARG ZM_VERSION
 
 # Add Nginx Repo
 RUN set -x \
-    && echo "deb https://nginx.org/packages/mainline/debian/ buster nginx" > /etc/apt/sources.list.d/nginx.list \
-    && apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 573BFD6B3D8FBC641079A6ABABF5BD827BD9BF62
+    && echo "deb https://nginx.org/packages/mainline/debian/ bullseye nginx" > /etc/apt/sources.list.d/nginx.list \
+    && apt-key adv --keyserver keyserver.ubuntu.com --recv-keys ABF5BD827BD9BF62
 
 # Install additional services required by ZM ("Recommends")
 # PHP-fpm not required for apache
@@ -230,7 +216,7 @@ COPY --chown=www-data --chmod=755 --from=builder /zminstall /
 COPY --from=s6downloader /s6downloader /
 
 # Copy rootfs
-COPY --from=rootfs-converter /rootfs /
+COPY rootfs /
 
 # Create required folders
 RUN set -x \
@@ -260,7 +246,6 @@ RUN set -x \
 RUN set -x \
     && ln -sf /proc/self/fd/1 /var/log/nginx/access.log \
     && ln -sf /proc/self/fd/1 /var/log/nginx/error.log \
-    && ln -sf /proc/self/fd/1 /var/log/php7.3-fpm.log \
     && ln -sf /usr/bin/msmtp /usr/lib/sendmail \
     && ln -sf /usr/bin/msmtp /usr/sbin/sendmail \
     && rm -rf /etc/nginx/conf.d
@@ -272,8 +257,6 @@ LABEL \
 ENV \
     S6_FIX_ATTRS_HIDDEN=1 \
     S6_BEHAVIOUR_IF_STAGE2_FAILS=2 \
-    APACHE_RUN_USER=www-data \
-    APACHE_RUN_GROUP=www-data \
     SOCKLOG_TIMESTAMP_FORMAT="" \
     MAX_LOG_SIZE_BYTES=1000000 \
     MAX_LOG_NUMBER=10

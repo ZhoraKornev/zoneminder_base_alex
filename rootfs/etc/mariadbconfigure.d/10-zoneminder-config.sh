@@ -1,19 +1,13 @@
 #!/usr/bin/with-contenv bash
 . "/usr/local/bin/logger"
 # ==============================================================================
-# Mariadb
-# Stub service to monitor db status
+# ZoneMinder-config
+# Configure default ZM Settings
 # ==============================================================================
-
-# Reconfigure to be oneshot
-/bin/s6-svc -O /var/run/s6/services/mariadb-configure
-
-# Wait for db to be up before configuring
-/bin/s6-svwait -U /var/run/s6/services/mariadb
 
 insert_command=""
 
-if ! (mysqlshow -u"${MYSQL_USER}" -p"${MYSQL_PASSWORD}" -h"${MYSQL_HOST}" zm Config > /dev/null 2>&1); then
+if ! (mysql -u"${MYSQL_USER}" -p"${MYSQL_PASSWORD}" -h"${MYSQL_HOST}" -e 'USE zm; SELECT * FROM Config LIMIT 1' > /dev/null 2>&1); then
   echo "Creating ZoneMinder db for first run" | init
   mysql -u"${MYSQL_USER}" -p"${MYSQL_PASSWORD}" -h"${MYSQL_HOST}" < /usr/share/zoneminder/db/zm_create.sql
 
@@ -29,25 +23,6 @@ if ! (mysqlshow -u"${MYSQL_USER}" -p"${MYSQL_PASSWORD}" -h"${MYSQL_HOST}" zm Con
   insert_command+="UPDATE Config SET Value = '${EMAIL_ADDRESS}' WHERE Name = 'ZM_EMAIL_ADDRESS';"
   insert_command+="UPDATE Config SET Value = '${EMAIL_ADDRESS}' WHERE Name = 'ZM_FROM_EMAIL';"
 
-  echo "Configuring ZoneMinder API settings..." | init
-  insert_command+="UPDATE Config SET Value = 'builtin' WHERE Name = 'ZM_AUTH_TYPE';"
-  insert_command+="UPDATE Config SET Value = 'hashed' WHERE Name = 'ZM_AUTH_RELAY';"
-  insert_command+="UPDATE Config SET Value = 1 WHERE Name = 'ZM_OPT_USE_API';"
-  insert_command+="UPDATE Config SET Value = 0 WHERE Name = 'ZM_AUTH_HASH_IPS';"
-
-  if [ "${USE_SECURE_RANDOM_ORG}" -eq "1" ]; then
-    echo "Fetching random secure string for ZoneMinder API from random.org..." | init
-    random_string=$(
-      wget -qO - \
-        "https://www.random.org/strings/?num=4&len=20&digits=on&upperalpha=on&loweralpha=on&unique=on&format=plain&rnd=new" \
-      | tr -d '\n' \
-    )
-  else
-    echo "Generating standard random string for ZoneMinder API..." | init
-    random_string="$RANDOM$RANDOM$RANDOM$RANDOM$RANDOM$RANDOM$RANDOM$RANDOM$RANDOM$RANDOM$RANDOM$RANDOM$RANDOM$RANDOM$RANDOM"
-  fi
-  insert_command+="UPDATE Config SET Value = '${random_string}' WHERE Name = 'ZM_AUTH_HASH_SECRET';"
-
 else
 
   echo "Configuring ZoneMinder Email From Address..." | info
@@ -57,9 +32,10 @@ fi
 
 if [[ -n "${ZM_SERVER_HOST}" ]] \
  && [ "$(mysql -u"${MYSQL_USER}" -p"${MYSQL_PASSWORD}" -h"${MYSQL_HOST}" zm -e \
-  "SELECT COUNT(*) FROM Servers WHERE Name = '${ZM_SERVER_HOST}';"  |
-  cut -f 2 |
-  sed -n '2 p')" \
+  "SELECT COUNT(*) FROM Servers WHERE Name = '${ZM_SERVER_HOST}';"  \
+  | cut -f 2 \
+  | sed -n '2 p' \
+  )" \
   == "0" ]; then
     echo "Adding multi-server db entry" | init
     insert_command+="INSERT INTO \`Servers\` "
@@ -68,14 +44,5 @@ if [[ -n "${ZM_SERVER_HOST}" ]] \
     insert_command+="('http','${ZM_SERVER_HOST}',80,'/index.php','/cgi-bin/nph-zms','/zm/api','${ZM_SERVER_HOST}',1,1,1,0);";
 fi
 
-echo "Applying db changes..." | init
+echo "Applying db changes..." | info
 mysql -u"${MYSQL_USER}" -p"${MYSQL_PASSWORD}" -h"${MYSQL_HOST}" zm -e "${insert_command}"
-
-echo "Upgrading db if necessary" | info
-s6-setuidgid www-data /usr/bin/zmupdate.pl -nointeractive | info
-
-echo "Refreshing db" | info
-s6-setuidgid www-data /usr/bin/zmupdate.pl -nointeractive -f | info
-
-# Notify s6 service is up
-fdmove 1 3 printf "done\n"
