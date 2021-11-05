@@ -30,6 +30,23 @@ RUN set -x \
 
 #####################################################################
 #                                                                   #
+# Convert rootfs to LF using dos2unix                               #
+# Alleviates issues when git uses CRLF on Windows                   #
+#                                                                   #
+#####################################################################
+FROM alpine:latest as rootfs-converter
+WORKDIR /rootfs
+
+RUN set -x \
+    && apk add --repository=http://dl-cdn.alpinelinux.org/alpine/edge/community/ \
+        dos2unix
+
+COPY rootfs .
+RUN set -x \
+    && find . -type f -print0 | xargs -0 -n 1 -P 4 dos2unix
+
+#####################################################################
+#                                                                   #
 # Download and extract s6 overlay                                   #
 #                                                                   #
 #####################################################################
@@ -184,8 +201,8 @@ ARG ZM_VERSION
 
 # Add Nginx Repo
 RUN set -x \
-    && echo "deb https://nginx.org/packages/mainline/debian/ bullseye nginx" > /etc/apt/sources.list.d/nginx.list \
-    && apt-key adv --keyserver keyserver.ubuntu.com --recv-keys ABF5BD827BD9BF62
+    && wget -qO - https://nginx.org/keys/nginx_signing.key | gpg --dearmor | tee /usr/share/keyrings/nginx.gpg > /dev/null \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/nginx.gpg] https://nginx.org/packages/mainline/debian/ bullseye nginx" > /etc/apt/sources.list.d/nginx.list
 
 # Install additional services required by ZM ("Recommends")
 # PHP-fpm not required for apache
@@ -204,19 +221,28 @@ RUN set -x \
 RUN set -x \
     && apt-get -y remove rsyslog || true
 
-## Create www-data user
-RUN set -x \
-    && groupmod -o -g 911 www-data \
-    && usermod -o -u 911 www-data
-
 # Install ZM
-COPY --chown=www-data --chmod=755 --from=builder /zminstall /
+COPY --from=builder /zminstall /
 
 # Install s6 overlay
 COPY --from=s6downloader /s6downloader /
 
 # Copy rootfs
-COPY rootfs /
+COPY --from=rootfs-converter /rootfs /
+
+## Create www-data user
+RUN set -x \
+    && groupmod -o -g 911 www-data \
+    && usermod -o -u 911 www-data
+
+# Reconfigure nginx and php logs
+# Configure msmtp
+RUN set -x \
+    && ln -sf /proc/self/fd/1 /var/log/nginx/access.log \
+    && ln -sf /proc/self/fd/1 /var/log/nginx/error.log \
+    && ln -sf /usr/bin/msmtp /usr/lib/sendmail \
+    && ln -sf /usr/bin/msmtp /usr/sbin/sendmail \
+    && rm -rf /etc/nginx/conf.d
 
 # Create required folders
 RUN set -x \
@@ -240,18 +266,6 @@ RUN set -x \
         /log \
     && chown -R nobody:nogroup \
         /log
-
-# Reconfigure nginx and php logs
-# Configure msmtp
-RUN set -x \
-    && ln -sf /proc/self/fd/1 /var/log/nginx/access.log \
-    && ln -sf /proc/self/fd/1 /var/log/nginx/error.log \
-    && ln -sf /usr/bin/msmtp /usr/lib/sendmail \
-    && ln -sf /usr/bin/msmtp /usr/sbin/sendmail \
-    && rm -rf /etc/nginx/conf.d
-
-LABEL \
-    com.github.alexyao2015.zoneminder_version=${ZM_VERSION}
 
 # System Variables
 ENV \
@@ -278,5 +292,10 @@ ENV \
     PGID=911 \
     TZ="America/Chicago" \
     USE_SECURE_RANDOM_ORG=1
+
+LABEL \
+    com.github.alexyao2015.zoneminder_version=${ZM_VERSION}
+
+EXPOSE 80/tcp
 
 CMD ["/init"]
